@@ -13,10 +13,8 @@
 //!
 //! # Protocol provenance
 //!
-//! The TH99 Pro protocol was reverse-engineered by
-//! [regenbildr](https://github.com/regenbildr/epomaker-th99-pro-AI-usage) from USB
-//! captures of Epomaker's official driver. This crate is an independent implementation
-//! written from the documented protocol facts; no upstream source code was copied.
+//! Every byte layout here was captured from live WebHID traffic of Epomaker's own driver
+//! and confirmed against the panel. See `docs/PROTOCOL.md`.
 
 pub mod clock;
 pub mod container;

@@ -41,7 +41,7 @@ timeout_ms = 10000                       # default
 ttl_secs   = 900                         # default freshness window
 ```
 
-The schedule is a six-field cron expression — the leading field is **seconds**, so
+The schedule is a six-field cron expression. The leading field is seconds, so
 `0 */5 * * * *` means "every five minutes on the minute", not "every five seconds".
 
 ```sh
@@ -68,15 +68,15 @@ Every reading carries a TTL. Past it, widgets bound to it render **dimmed** with
 place of text.
 
 This matters more than it sounds. On a glanceable, non-interactive display, a number that
-has silently stopped updating is worse than no number at all — nothing tells the reader it
-went stale. Set `ttl_secs` to a little more than your schedule interval.
+has silently stopped updating is worse than no number at all, because nothing on the screen
+tells the reader it went stale. Set `ttl_secs` to a little more than your schedule interval.
 
 ## Polling is free; rendering is not
 
 The scheduler runs sources and re-renders, then the **governor** decides whether the result
 is worth a flash write. Those are separate on purpose.
 
-Poll as often as you find useful — it costs nothing. A one-minute poll against a
+Poll as often as you find useful, it costs nothing. A one-minute poll against a
 fifteen-minute write floor is not waste: it means the image that *does* get written reflects
 data seconds old rather than fifteen minutes old.
 

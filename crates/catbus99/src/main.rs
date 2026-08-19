@@ -166,7 +166,7 @@ enum Command {
         #[arg(long)]
         pattern: bool,
         /// Bytes reserved before frame data. 256 matches the documented container;
-        /// 4096 tests the alternative layout implied by upstream's make_test_payload.
+        /// 4096 tests an alternative layout, kept because it was worth ruling out.
         #[arg(long, default_value_t = 256)]
         preamble_bytes: usize,
     },
@@ -250,7 +250,7 @@ fn cmd_selftest(
         build_container(&[&black, &white], &[delay])?
     } else {
         // Alternative layout: same metadata fields, but frame data starts at
-        // `preamble_bytes` instead of 256. Tests upstream's contradictory preamble size.
+        // `preamble_bytes` instead of 256, to rule out a larger metadata block.
         let mut p = vec![0u8; preamble_bytes];
         p[..256].fill(0xFF);
         p[0] = 2;

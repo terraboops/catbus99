@@ -11,15 +11,15 @@ cargo fmt
 ```
 
 No test requires hardware. If a change you make needs a keyboard to verify, say so in the PR
-and describe what you saw on the panel — see below.
+and describe what you saw on the panel. See below.
 
 ## The one rule that matters
 
 **All writes to the display go through `Governor::upload_to_panel`.** The raw upload is
 crate-private specifically so this is enforced by the compiler rather than by review. If you
-find yourself needing to widen that visibility, please open an issue first — it is almost
-certainly the wrong fix, and `docs/DESIGN.md` explains the two approaches that were already
-tried and rejected.
+find yourself needing to widen that visibility, open an issue first. It is almost certainly
+the wrong fix, and `docs/DESIGN.md` covers the two approaches that were already tried and
+rejected.
 
 The display's flash is rated for ~100,000 writes and cannot be replaced. Any feature that
 increases how often the rendered image *changes* is spending a finite, shared resource.
@@ -31,7 +31,7 @@ a magnified preview looked fine while the physical panel was illegible.
 
 So for anything that alters rendering:
 
-1. Run the regression harness — `cargo test -p catbus99-render --test regression`
+1. Run the regression harness: `cargo test -p catbus99-render --test regression`
 2. If the change is intended, regenerate and **review the image diff before committing**:
    ```sh
    CATBUS99_BLESS=1 cargo test -p catbus99-render --test regression
@@ -42,9 +42,8 @@ So for anything that alters rendering:
 ## Protocol findings
 
 If you capture something new, please include the raw bytes and how you captured them.
-`docs/PROTOCOL.md` distinguishes what is **verified** from what is **assumed**, and that
-distinction is worth preserving — several upstream claims turned out to be wrong, and several
-of ours will too.
+`docs/PROTOCOL.md` separates what we have actually seen from what we are guessing, and that
+distinction is worth keeping. Some of what is in there will turn out to be wrong.
 
 Entries whose meaning is not established are preserved verbatim rather than guessed at. A
 backup that silently mistranslates a key is worse than one that admits it does not know.
@@ -53,7 +52,7 @@ backup that silently mistranslates a key is worse than one that admits it does n
 
 catbus99 is tested on a single TH99 Pro (firmware V1.17) on macOS 15, Apple Silicon. If you
 have a different unit, firmware, or OS, `catbus99 probe --json` output in an issue is genuinely
-useful — especially if interface discovery fails.
+useful, especially if interface discovery fails.
 
 ## Style
 

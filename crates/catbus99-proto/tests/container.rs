@@ -14,9 +14,9 @@ fn frame_geometry_matches_the_panel() {
     assert_eq!(FRAME_BYTES, 30_720);
 }
 
-/// The upstream capture documents that a deterministic two-frame image begins
-/// `02 32 00 FF...`. Reproducing that exact prefix is the strongest offline evidence
-/// that our encoder agrees with the firmware.
+/// A two-frame container begins `<count> <delay> 00 FF...`. Our capture of the driver
+/// writing a still image shows `02 19 00 ff`, so reproducing that shape with our own delay
+/// byte is the strongest offline evidence that the encoder agrees with the firmware.
 #[test]
 fn two_frame_container_matches_the_documented_prefix() {
     let a = frame(0x00);

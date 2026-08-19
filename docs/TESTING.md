@@ -5,9 +5,9 @@ cargo test                      # everything
 cargo clippy --all-targets -- -D warnings
 ```
 
-No test requires a keyboard. Hardware-touching code is exercised for *shape* — that a
-probe returns, that an open either succeeds or fails cleanly — never for a successful
-upload, so the suite is the same with the keyboard unplugged.
+No test requires a keyboard. Device-touching code is exercised for shape: that a probe
+returns, that an open either succeeds or fails cleanly. Never for a successful upload, so the
+suite behaves the same with the keyboard unplugged.
 
 ## The visual regression harness
 
@@ -47,8 +47,8 @@ keep by making the change show up in review.
 differ only by a colour multiply and a placeholder string, so a mistake there produces a
 screen that looks fine and quietly lies about how current its numbers are.
 
-**The harness is self-tested.** Changing the stale-dim factor from 0.35 to 0.36 — a 1%
-shift, invisible in a thumbnail — fails `degraded_data` with 740 changed pixels.
+The harness is self-tested. Nudging the stale-dim factor from 0.35 to 0.36, a 1% shift that
+is invisible in a thumbnail, fails `degraded_data` with 740 changed pixels.
 
 ## What each suite covers
 
@@ -65,8 +65,8 @@ shift, invisible in a thumbnail — fails `degraded_data` with 740 changed pixel
 
 **`probe_isolation.rs`** exists because of a crash, not a hypothesis. On macOS libhidapi
 ties its IOKit state to the thread that calls `hid_init()`; if that thread exits, later use
-aborts the process with SIGTRAP. These tests reproduce it directly and would fail — by
-aborting — if the dedicated init thread were removed.
+aborts the process with SIGTRAP. These tests reproduce it directly, and if the dedicated
+init thread were removed they would fail by aborting.
 
 **`sources.rs`** treats a data source as hostile: non-zero exit, unparseable output, a
 hang, a missing executable, and 100 KB of stderr. A source is arbitrary user code, and one

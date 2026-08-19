@@ -1,107 +1,111 @@
 # Design notes
 
-Why catbus99 is shaped the way it is. Each of these was a real fork in the road.
+Why catbus99 is shaped the way it is. Each of these was a fork in the road where the obvious
+option turned out to be wrong.
 
-## The governor is enforced by the compiler, not by convention
+## The governor is enforced by the compiler
 
-Every flash-endurance guarantee depends on all writes passing through one governor. That
-has to be enforced, because "remember to call the governor" is exactly the kind of rule that
-holds until someone adds a new client under time pressure — and here the new client might be
-an autonomous agent in a retry loop.
+Every flash-endurance guarantee depends on all writes going through one governor. "Remember
+to call the governor" is exactly the kind of rule that holds right up until someone adds a
+new client in a hurry, and in this project the new client might be an autonomous agent
+retrying in a loop.
 
-Two designs were tried and **do not work in Rust**:
+Two designs looked better and don't work in Rust.
 
-- **A capability token** — `upload(payload, permit: &WritePermit)`. The permit's constructor
-  must be `pub` for the governor to mint one from another crate, which means anyone else can
-  mint one too.
-- **A Cargo feature** — gating the raw write behind `unchecked-writes`. Cargo features are
-  *unified* across a build graph: the moment one crate enables it, every crate in the same
-  build gets it.
+A **capability token**, where `upload()` demands a `&WritePermit`, fails because the permit's
+constructor has to be public for the governor to mint one from another crate. If the governor
+can make one, so can anybody.
 
-Rust's privacy is per-crate, so the only way to enforce the invariant is to put the raw write
-and the policy guarding it **in the same crate**. Hence `catbus99-device` contains both the
-USB-HID transport and the governor, with `Device::upload_container` crate-private and
+A **Cargo feature** gating the raw write fails because features are unified across a build
+graph. The moment one crate turns on `unchecked-writes`, every crate in that build gets it.
+
+Rust privacy is per-crate, which leaves exactly one option: put the raw write and the policy
+that guards it in the same crate. That's why `catbus99-device` contains both the USB-HID
+transport and the governor, with `Device::upload_container` crate-private and
 `Governor::upload_to_panel` as the only public door.
 
-For belt and braces, the low-level `write_report` — used for config-channel commands like
-setting the clock — refuses any report beginning `AA 50`, so a bulk image upload cannot be
-hand-rolled out of individual report writes either.
+There's a second door I had to close. The low-level `write_report`, which exists for config
+commands like setting the clock, will refuse any report starting with `AA 50`. Without that
+you could hand-roll an image upload out of sixteen individual report writes and nothing would
+count them.
 
-There is no `--force` anywhere. A bound that can be routed around is not a bound. A refusal
-explains itself and says when the write will be allowed.
+No `--force` flag anywhere. A limit you can step around isn't a limit. When the governor
+says no it tells you why and when to come back.
 
-## Precision is a cost
+## Precision costs money
 
-The flash budget is not a limit on how often catbus99 *runs*. Polling is free. It is a limit
-on **how precisely it displays things**, because only a change in rendered pixels costs a
-write.
+The flash budget isn't a limit on how often catbus99 runs. Polling is free. It's a limit on
+how precisely you display things, because only a change in the rendered image costs a write.
 
-This turns what looks like a formatting option into a safety control. `quantize_minutes`
-defaults to 15 on time widgets not for taste but because a one-minute clock would exhaust the
-panel in about 69 days. The same logic applies to every widget: a progress bar quantised to
-5% steps costs a fraction of one tracking 0.1%, for a difference nobody can see at 160×96.
+That turns what looks like a formatting option into a safety control. `quantize_minutes`
+defaults to 15 on time widgets, not for taste, but because a clock showing minutes would
+exhaust the panel in about 69 days. The same maths applies everywhere: a progress bar in 5%
+steps costs a twentieth of one tracking 0.1%, and at 160×96 nobody can see the difference.
 
-## A daemon owns the device
+## One process owns the device
 
-If the CLI, the scheduler and the MCP server each opened the device directly, each could
-satisfy its own rate limit while together tripling the write rate, and each would keep its own
-copy of the wear state so the odometer would undercount. Centralising also gives one place
-that knows what is currently on screen, which is what makes change-skip work across clients.
+If the CLI, the scheduler and the MCP server each opened the device, all three could sit
+comfortably inside their own rate limit while together tripling the write rate. Each would
+also keep its own copy of the wear counter, so none of them would be right.
 
-The CLI refuses a direct write while a daemon is running, and a second daemon refuses to
-steal a live socket, for the same reason.
+Centralising also gives one place that knows what's currently on the panel, which is what
+makes change-skip work across clients rather than per-process. The CLI refuses a direct write
+while the daemon is up, and a second daemon refuses to take over a live socket, for the same
+reason.
 
-## Duration is a rendering concern, not a protocol one
+## Duration belongs to the renderer, not the protocol
 
-The container carries N frames but only **N−1 single-byte delays**, so no frame can be held
-longer than 255 units. A cat that blinks every two seconds is not expressible as two frames
-at any delay value.
+The container carries N frames and only N−1 one-byte delays. Nothing can stay on screen for
+longer than 255 units, so a cat that blinks every two seconds cannot be expressed as two
+frames at any delay value.
 
-catbus99 handles duration by picking a uniform tick and **duplicating** frames. The tick
-starts at the GCD of the source durations — the largest tick that reproduces the timing
-exactly, so as few frames as possible are duplicated — and coarsens only if the frame budget
-demands it. When the budget is genuinely too small the animation is decimated evenly rather
-than truncated, so the whole loop is still represented instead of just its beginning.
+catbus99 handles duration by choosing one uniform tick and repeating frames. The tick starts
+at the GCD of the source durations, the largest value that reproduces your timing exactly, so
+as few frames get duplicated as possible. It only coarsens if the frame budget forces it, and
+when the budget is genuinely too small it thins the animation evenly instead of cutting it
+off, so you still see the whole loop.
 
-This has a second benefit. Because every delay byte then carries the same value, the
-unresolved question of *which* frame an N−1 delay applies to stops mattering. The design
-sidesteps an open protocol question instead of depending on an answer.
+There's a bonus. Because every delay byte then holds the same value, it stops mattering which
+frame a delay belongs to, which happens to be a question about this protocol we never
+answered. The design sidesteps it rather than depending on a guess.
 
-## A bitmap font, not a scaled outline font
+## A bitmap font, not a scaled one
 
-An outline font was tried two ways and failed both, on the real panel:
+I tried an outline font two ways and both failed on the actual panel.
 
-- **Thresholded coverage** deleted glyph stems. Measured across 220 sizes, the face never
-  rasterised better than 74% "crisp" (coverage near 0 or 1), and only at ~20px where the cap
-  height is 13px — unusable on a 96px screen. At 8px nearly every pixel carries *partial*
-  coverage, so a threshold removes the letterforms rather than sharpening them.
-- **Alpha blending** was legible in a magnified PNG preview and grey mush on glass.
+Thresholding the coverage ate the stems. I measured 220 sizes and the face never rasterised
+better than 74% crisp, and only at around 20px, where the cap height is 13 pixels on a
+96-pixel screen. At 8px almost every pixel lands on partial coverage, so a threshold deletes
+letterforms instead of sharpening them.
 
-Neither was a tuning problem. An outline font makes a rasterisation decision that has no good
-answer at this size; bitmap glyphs are defined *on* the pixel grid, so there is no decision to
-get wrong. On a display this small, contrast beats letterform fidelity.
+Alpha blending kept the stems and looked genuinely fine in a magnified preview. On glass it
+was grey soup.
 
-The same measurement produced a corollary: **dithering must be per-widget.** It helps
-gradients and photographs and actively destroys flat colour art, adding high-frequency noise
-where the source had clean regions. (catbus99 does not yet implement this properly — see the
-README's status section.)
+Neither was a tuning problem. An outline font forces a rasterisation decision that has no
+good answer at this size. Bitmap glyphs are defined on the pixel grid, so there's no decision
+to get wrong. Contrast beats letterform fidelity here, and it isn't close.
 
-## Stale data must look stale
+The same measurement produced a corollary about dithering: it has to be per-widget. It helps
+photographs and gradients and it wrecks flat colour, scattering noise across regions that
+were clean in the source. catbus99 doesn't implement that properly yet.
 
-A reading past its TTL renders dimmed with `--` in place of text, and a missing binding
-renders a placeholder rather than defaulting to zero.
+## Old data has to look old
 
-On an interactive screen you can refresh and see. On a glanceable, non-interactive one, a
-number that silently stopped updating is worse than no number — a zero looks exactly like a
-real measurement of zero. This is the case most likely to regress invisibly, which is why the
-visual regression harness has a scene dedicated to it.
+A reading past its TTL renders dimmed with `--` instead of text, and a missing binding draws
+a placeholder rather than falling back to zero.
 
-## A preview can prove a layout wrong; it cannot prove one right
+On a web page you refresh and find out. You can't refresh a keyboard. If a source dies and
+the widget keeps showing its last number, that number looks exactly like a live one, and a
+zero looks exactly like a real measurement of zero. This is also the case most likely to break
+without anyone noticing, since the fresh and stale paths differ by a colour multiply and a
+string, which is why the regression harness has a scene dedicated to it.
 
-Twice during development a magnified PNG preview looked fine while the physical panel did
-not. A 4× nearest-neighbour preview is *systematically* flattering: four times the physical
-size, none of the panel's contrast behaviour.
+## A preview can prove a layout wrong, never right
 
-The regression harness is therefore scoped honestly. It catches *changes* — a single stray
-pixel — which is exactly what a regression test should do. It cannot tell you whether the
-design is legible. Only the panel can.
+Twice during this project a magnified PNG looked completely fine while the physical panel was
+unreadable. A 4× nearest-neighbour preview is flattering by construction: four times the size,
+none of the panel's contrast behaviour.
+
+So the regression harness is scoped honestly. It catches changes, down to a single pixel,
+which is what a regression test is for. It cannot tell you whether a design is legible. Only
+the screen can do that.
