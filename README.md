@@ -1,5 +1,8 @@
 # catbus99
 
+[![CI](https://github.com/terraboops/catbus99/actions/workflows/ci.yml/badge.svg)](https://github.com/terraboops/catbus99/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 **Put live data on your Epomaker TH99 Pro's screen — from macOS, from a script, or from an AI agent.**
 
 The TH99 Pro ships with a 160×96 TFT and a Windows-only driver. catbus99 drives that screen
@@ -312,8 +315,11 @@ large animation upload).
 read 50ms, so animation timing is approximate. Frame duplication sidesteps it — with a
 uniform tick, which frame a delay applies to stops mattering.
 
-**Tested on** a single TH99 Pro (firmware V1.17) on macOS 15, Apple Silicon. Linux should
-work — nothing is macOS-specific beyond the notes above — but is untested. Reports welcome.
+**Tested on** a single TH99 Pro (firmware V1.17) on macOS 15, Apple Silicon. The full test
+suite runs on Linux and macOS in CI, but **no Linux machine has driven a real keyboard yet** —
+the suite deliberately needs no hardware, so a green build says the code compiles and behaves,
+not that the panel lit up. If you try it on Linux, or on a different unit or firmware,
+`catbus99 probe --json` in an issue is genuinely useful.
 
 ---
 
