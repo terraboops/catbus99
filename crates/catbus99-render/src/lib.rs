@@ -150,7 +150,9 @@ pub fn load_frames(path: &Path, mode: Fit, dither: bool) -> Result<Vec<Frame>, R
             .into_iter()
             .map(|f| {
                 let (num, den) = f.delay().numer_denom_ms();
-                let ms = if den == 0 { 100 } else { num / den };
+                // A zero denominator means the GIF declared no delay; 100ms is the
+                // conventional browser fallback for that case.
+                let ms = num.checked_div(den).unwrap_or(100);
                 let buf = f.into_buffer();
                 Frame {
                     pixels: to_rgb565(&fit(&buf, mode, [0, 0, 0, 255]), dither),
