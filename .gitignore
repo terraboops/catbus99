@@ -1,0 +1,16 @@
+/target
+**/*.rs.bk
+.DS_Store
+/data
+.remember/
+
+# Regression-harness failure output, not fixtures
+crates/catbus99-render/tests/fixtures/*.actual.png
+crates/catbus99-render/tests/fixtures/*.diff.png
+
+# Internal working notes, kept locally
+/PLAN.md
+/PLAN_BRIEF.md
+/FEEDBACK.md
+/docs/IMPACT_LOG.md
+/docs/impact/

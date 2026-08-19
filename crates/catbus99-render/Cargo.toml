@@ -1,0 +1,17 @@
+[package]
+name = "catbus99-render"
+description = "Image and animation rendering for the Epomaker TH99 Pro 160x96 RGB565 display"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+catbus99-proto.workspace = true
+catbus99-model.workspace = true
+chrono.workspace = true
+chrono-tz.workspace = true
+image.workspace = true
+thiserror.workspace = true

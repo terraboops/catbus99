@@ -1,0 +1,51 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/catbus99-proto",
+    "crates/catbus99-daemon",
+    "crates/catbus99-device",
+    "crates/catbus99-mcp",
+    "crates/catbus99-model",
+    "crates/catbus99-render",
+    "crates/catbus99",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+license = "MIT"
+repository = "https://github.com/terraboops/catbus99"
+authors = ["terraboops"]
+
+[workspace.dependencies]
+catbus99-proto = { path = "crates/catbus99-proto" }
+catbus99-daemon = { path = "crates/catbus99-daemon" }
+catbus99-device = { path = "crates/catbus99-device" }
+catbus99-mcp = { path = "crates/catbus99-mcp" }
+catbus99-model = { path = "crates/catbus99-model" }
+catbus99-render = { path = "crates/catbus99-render" }
+thiserror = "2"
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+clap = { version = "4", features = ["derive"] }
+hidapi = "2.6"
+chrono = { version = "0.4", features = ["serde"] }
+image = "0.25"
+schemars = { version = "1", features = ["chrono04"] }
+ab_glyph = "0.2"
+chrono-tz = "0.10"
+toml = "0.8"
+sha2 = "0.10"
+dirs = "6"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "process", "io-util", "sync", "signal", "fs"] }
+cron = "0.17"
+base64 = "0.22"
+rmcp = { version = "3", features = ["server", "transport-io", "macros"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[profile.release]
+lto = true
+strip = true

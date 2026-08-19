@@ -1,0 +1,63 @@
+# A usage screen: two bars, a countdown, and a clock.
+#
+# Bind the data_point values to whatever your source publishes; see docs/SOURCES.md.
+# Render it without writing to the panel:
+#   catbus99 layout examples/layouts/usage.toml --preview /tmp/out.png
+
+id = "usage"
+name = "Claude usage"
+background = "#0a0c10"
+
+[[slots]]
+id = "title"
+rect = { x = 2, y = 1, w = 96, h = 8 }
+[slots.widget]
+type = "label"
+size = "small"
+align = "left"
+color = "#4ac8ff"
+text = { kind = "literal", value = "CATBUS99" }
+
+[[slots]]
+id = "clock"
+rect = { x = 100, y = 1, w = 58, h = 8 }
+[slots.widget]
+type = "clock"
+format = "%H:%M"
+# Quantised to 15 minutes: a 1-minute clock would exhaust the panel in ~69 days.
+quantize_minutes = 15
+size = "small"
+align = "right"
+
+[[slots]]
+id = "session"
+rect = { x = 2, y = 12, w = 156, h = 17 }
+[slots.widget]
+type = "progress_bar"
+style = "solid"
+show_value = true
+color = "#4ac8ff"
+track = "#1a2028"
+value = { kind = "data_point", source = "claude", key = "session_pct" }
+label = { kind = "literal", value = "SESSION" }
+
+[[slots]]
+id = "weekly"
+rect = { x = 2, y = 31, w = 156, h = 17 }
+[slots.widget]
+type = "progress_bar"
+style = "segmented"
+color = "#ffa53a"
+track = "#1a2028"
+value = { kind = "data_point", source = "claude", key = "weekly_pct" }
+label = { kind = "literal", value = "WEEKLY" }
+
+[[slots]]
+id = "resets"
+rect = { x = 2, y = 51, w = 156, h = 44 }
+[slots.widget]
+type = "reset_timer"
+label = "RESETS IN"
+format = "compact"
+quantize_minutes = 15
+deadline = { kind = "data_point", source = "claude", key = "resets_at" }
