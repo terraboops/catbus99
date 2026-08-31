@@ -169,3 +169,125 @@ fn decoding_a_short_slice_returns_none_rather_than_panicking() {
         Some(KeyBinding::Hid(0x04))
     );
 }
+
+// --- writing a keymap back ---
+
+/// Read and write commands must be paired in one place. Reading the base layer and writing
+/// it over the Fn layer would be acknowledged by the keyboard and leave it typing wrongly,
+/// so the pairing is not something a caller should assemble by hand.
+#[test]
+fn read_and_write_commands_are_paired() {
+    assert_eq!(write_command_for(CMD_READ_BASIC), Some(CMD_WRITE_BASIC));
+    assert_eq!(write_command_for(CMD_READ_FN), Some(CMD_WRITE_FN));
+    assert_eq!(write_command_for(0x50), None, "must not pair a TFT command");
+    assert_eq!(
+        write_command_for(0x34),
+        None,
+        "must not pair the clock command"
+    );
+}
+
+#[test]
+fn a_write_request_mirrors_the_read_header() {
+    let page = vec![0xABu8; PAGE_SIZE];
+    let req = build_write_request(CMD_WRITE_BASIC, 0x70, &page).unwrap();
+
+    assert_eq!(&req[..3], &[0xAA, CMD_WRITE_BASIC, PAGE_SIZE as u8]);
+    assert_eq!(u32::from_le_bytes([req[3], req[4], req[5], 0]), 0x70);
+    assert_eq!(&req[8..8 + PAGE_SIZE], &page[..]);
+    assert_eq!(req.len(), 64);
+}
+
+/// The command whitelist is the guard that stops a typo turning a keymap restore into some
+/// other config-channel operation.
+#[test]
+fn a_write_request_rejects_any_command_that_is_not_a_keymap_write() {
+    let page = vec![0u8; PAGE_SIZE];
+    for bad in [0x12u8, 0x16, 0x34, 0x50, 0x00, 0xFF] {
+        assert!(
+            build_write_request(bad, 0, &page).is_err(),
+            "accepted non-keymap command {bad:#04x}"
+        );
+    }
+    assert!(build_write_request(CMD_WRITE_BASIC, 0, &page).is_ok());
+    assert!(build_write_request(CMD_WRITE_FN, 0, &page).is_ok());
+}
+
+#[test]
+fn a_write_request_rejects_a_wrong_sized_page() {
+    for len in [0usize, 1, PAGE_SIZE - 1, PAGE_SIZE + 1, 64] {
+        assert!(
+            build_write_request(CMD_WRITE_BASIC, 0, &vec![0u8; len]).is_err(),
+            "accepted a {len}-byte page"
+        );
+    }
+}
+
+/// A short table would leave part of the keyboard holding its previous mapping: a
+/// half-applied keymap that looks like a success. Refusing is the correct behaviour.
+#[test]
+fn paging_rejects_a_table_that_is_not_exactly_the_matrix_size() {
+    let full = MATRIX_KEYS * ENTRY_SIZE;
+    for len in [0usize, 4, full - 4, full - 1, full + 1, full * 2] {
+        assert!(
+            write_pages(&vec![0u8; len]).is_err(),
+            "accepted a {len}-byte table"
+        );
+    }
+    assert!(write_pages(&vec![0u8; full]).is_ok());
+}
+
+#[test]
+fn paging_covers_the_whole_table_at_the_same_offsets_the_reader_uses() {
+    let table: Vec<u8> = (0..MATRIX_KEYS * ENTRY_SIZE)
+        .map(|i| (i % 251) as u8)
+        .collect();
+    let pages = write_pages(&table).unwrap();
+
+    // Same page size and stride as the read path.
+    assert_eq!(pages.len(), (MATRIX_KEYS * ENTRY_SIZE).div_ceil(PAGE_SIZE));
+    for (i, (offset, page)) in pages.iter().enumerate() {
+        assert_eq!(*offset as usize, i * PAGE_SIZE);
+        assert_eq!(page.len(), PAGE_SIZE);
+    }
+
+    // Reassembling the pages reproduces the table exactly, so nothing is dropped or
+    // duplicated across the page boundary.
+    let mut rebuilt: Vec<u8> = pages.iter().flat_map(|(_, p)| p.clone()).collect();
+    rebuilt.truncate(table.len());
+    assert_eq!(rebuilt, table);
+}
+
+/// The full loop a restore performs: decode a captured keymap, re-encode it, page it for
+/// writing, and reassemble. Any byte lost anywhere in that chain is a mis-mapped key.
+#[test]
+fn a_captured_keymap_survives_the_entire_restore_pipeline() {
+    let original = captured_bytes();
+    let table = decode_table(&original).unwrap();
+    let encoded = encode_table(&table);
+    assert_eq!(encoded, original, "decode/encode is not lossless");
+
+    let pages = write_pages(&encoded).unwrap();
+    let mut rebuilt: Vec<u8> = pages.iter().flat_map(|(_, p)| p.clone()).collect();
+    rebuilt.truncate(original.len());
+    assert_eq!(rebuilt, original, "paging lost or reordered bytes");
+
+    // And the reassembled table still decodes to the same keys.
+    assert_eq!(
+        decode_table(&rebuilt)
+            .unwrap()
+            .iter()
+            .map(|b| b.name())
+            .collect::<Vec<_>>(),
+        table.iter().map(|b| b.name()).collect::<Vec<_>>()
+    );
+}
+
+/// The final page is partial (448 bytes over 56-byte pages leaves a remainder), so it must
+/// be zero-padded rather than short.
+#[test]
+fn the_final_page_is_padded_to_full_width() {
+    let pages = write_pages(&vec![0x5Au8; MATRIX_KEYS * ENTRY_SIZE]).unwrap();
+    let (_, last) = pages.last().unwrap();
+    assert_eq!(last.len(), PAGE_SIZE);
+}

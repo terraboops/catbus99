@@ -143,6 +143,9 @@ pub enum HidError {
     #[error("short write: sent {sent} of {expected} bytes")]
     ShortWrite { sent: usize, expected: usize },
 
+    #[error("keymap read-back does not match what was written, first difference at byte {offset}. The keymap may be partially applied: re-run the restore, or use the keyboard's factory reset")]
+    KeymapVerifyFailed { offset: usize },
+
     #[error("refusing a raw AA 50 panel write: image uploads must go through the write governor, which bounds flash wear")]
     UngovernedPanelWrite,
 
@@ -420,6 +423,68 @@ impl Device {
         }
         table.truncate(total);
         Ok(table)
+    }
+
+    /// Write a full keymap layer, then read it back and verify byte-for-byte.
+    ///
+    /// # What this changes
+    ///
+    /// The keymap table decides what each key does. A wrong table means the keyboard types
+    /// the wrong characters until a correct one is written. That is inconvenient, not
+    /// dangerous: the table is fixed-size and fully rewritable, the vendor's own driver
+    /// rewrites it on every remap, and nothing here touches program flash, the bootloader,
+    /// or the code option register.
+    ///
+    /// # Why it verifies
+    ///
+    /// A partially-applied keymap is the genuinely bad outcome, because it looks like
+    /// success. This writes every page, reads the whole layer back, and returns an error
+    /// if the result differs from what was intended — so a caller is never told a restore
+    /// worked when it did not.
+    pub fn write_keymap(
+        &self,
+        read_command: u8,
+        table: &[u8],
+        timeout: Duration,
+    ) -> Result<(), HidError> {
+        use catbus99_proto::keymap::{build_write_request, write_command_for, write_pages};
+
+        let write_command = write_command_for(read_command).ok_or(HidError::BadAck {
+            index: 0,
+            got: format!("unknown keymap layer command {read_command:#04x}"),
+        })?;
+
+        for (offset, page) in write_pages(table)? {
+            let request = build_write_request(write_command, offset, &page)?;
+            self.write_report(&request)?;
+
+            let reply = self.read_report(64, timeout)?;
+            // The config channel echoes the request with 0xAA -> 0x55.
+            if reply.len() < 2 || reply[0] != 0x55 || reply[1] != write_command {
+                return Err(HidError::BadAck {
+                    index: (offset as usize) / catbus99_proto::keymap::PAGE_SIZE,
+                    got: reply
+                        .iter()
+                        .take(4)
+                        .map(|b| format!("{b:02x}"))
+                        .collect::<Vec<_>>()
+                        .join(" "),
+                });
+            }
+        }
+
+        // Read back the layer we just wrote and compare. Trusting the per-page echo alone
+        // would accept a write the keyboard acknowledged but did not store.
+        let readback = self.read_keymap(read_command, timeout)?;
+        if readback != table {
+            let first = readback
+                .iter()
+                .zip(table)
+                .position(|(a, b)| a != b)
+                .unwrap_or(0);
+            return Err(HidError::KeymapVerifyFailed { offset: first });
+        }
+        Ok(())
     }
 
     pub(crate) fn upload_container(

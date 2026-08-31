@@ -1,6 +1,6 @@
 //! catbus99 -- control plane for the Epomaker TH99 Pro keyboard screen.
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use catbus99_daemon::protocol::{default_socket_path, Origin, Request, Response};
 use catbus99_daemon::server;
 use catbus99_daemon::{Daemon, Paths};
@@ -36,6 +36,14 @@ enum Command {
         /// Emit machine-readable JSON instead of a human summary.
         #[arg(long)]
         json: bool,
+    },
+    /// Write a saved keymap back to the keyboard. Destructive; verifies afterwards.
+    KeymapRestore {
+        /// A JSON file produced by `catbus99 keymap --out`.
+        file: PathBuf,
+        /// Actually write. Without this, shows exactly what would change and stops.
+        #[arg(long)]
+        execute: bool,
     },
     /// Run the MCP server on stdio, so agents can drive the screen.
     Mcp {
@@ -177,6 +185,7 @@ fn main() -> Result<()> {
         Command::Probe { json } => cmd_probe(json),
         Command::Mcp { socket, install } => cmd_mcp(socket, install),
         Command::Keymap { fn_layer, out } => cmd_keymap(fn_layer, out),
+        Command::KeymapRestore { file, execute } => cmd_keymap_restore(file, execute),
         Command::Daemon { socket } => cmd_daemon(socket),
         Command::Status => client(Request::Status),
         Command::Sources => client(Request::ListSources),
@@ -1043,5 +1052,102 @@ fn cmd_mcp(socket: Option<PathBuf>, install: bool) -> Result<()> {
         service.waiting().await?;
         Ok::<(), anyhow::Error>(())
     })?;
+    Ok(())
+}
+
+/// Restore a saved keymap.
+///
+/// The safety here is deliberately front-loaded: the file is validated, the current keymap
+/// is read, and every change is printed *before* anything is written. A restore you can see
+/// is a restore you can cancel.
+fn cmd_keymap_restore(file: PathBuf, execute: bool) -> Result<()> {
+    use catbus99_proto::keymap::{
+        decode_table, CMD_READ_BASIC, CMD_READ_FN, ENTRY_SIZE, MATRIX_COLS, MATRIX_KEYS,
+    };
+
+    let text = std::fs::read_to_string(&file)?;
+    let doc: serde_json::Value = serde_json::from_str(&text)?;
+
+    let layer = doc["layer"].as_str().unwrap_or_default();
+    let (command, layer_name) = match layer {
+        "base" => (CMD_READ_BASIC, "base"),
+        "fn" => (CMD_READ_FN, "fn"),
+        other => bail!(
+            "backup declares layer {other:?}; expected \"base\" or \"fn\". \
+             Writing one layer's table over the other would look like success and leave \
+             the keyboard typing the wrong things."
+        ),
+    };
+
+    // raw_hex is authoritative. The decoded names are for humans; bytes are for the device.
+    let hex = doc["raw_hex"]
+        .as_str()
+        .context("backup has no `raw_hex` field; it was not produced by `catbus99 keymap --out`")?;
+    if hex.len() != MATRIX_KEYS * ENTRY_SIZE * 2 {
+        bail!(
+            "backup contains {} bytes, expected {}. A short table would leave part of the \
+             keyboard unchanged, which is worse than refusing.",
+            hex.len() / 2,
+            MATRIX_KEYS * ENTRY_SIZE
+        );
+    }
+    let desired: Vec<u8> = (0..hex.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&hex[i..i + 2], 16))
+        .collect::<Result<_, _>>()
+        .context("backup `raw_hex` is not valid hex")?;
+
+    println!("catbus99 keymap restore");
+    println!("  file:  {}", file.display());
+    println!("  layer: {layer_name}");
+
+    let device = Device::open(Interface::Config)?;
+    let current = device.read_keymap(command, Duration::from_millis(5000))?;
+
+    let now = decode_table(&current)?;
+    let want = decode_table(&desired)?;
+    let changes: Vec<(usize, String, String)> = now
+        .iter()
+        .zip(&want)
+        .enumerate()
+        .filter(|(_, (a, b))| a != b)
+        .map(|(i, (a, b))| (i, a.name(), b.name()))
+        .collect();
+
+    println!();
+    if changes.is_empty() {
+        println!("  No differences. The keyboard already has this keymap; nothing to write.");
+        return Ok(());
+    }
+    println!("  {} of {MATRIX_KEYS} keys would change:", changes.len());
+    for (i, from, to) in changes.iter().take(30) {
+        println!(
+            "    r{} c{:<2}  {:<12} -> {}",
+            i / MATRIX_COLS,
+            i % MATRIX_COLS,
+            from,
+            to
+        );
+    }
+    if changes.len() > 30 {
+        println!("    ... and {} more", changes.len() - 30);
+    }
+
+    if !execute {
+        println!();
+        println!("  Nothing was written. Re-run with --execute to apply.");
+        return Ok(());
+    }
+
+    println!();
+    println!(
+        "  WRITING KEYMAP ({} bytes, {layer_name} layer)",
+        desired.len()
+    );
+    device.write_keymap(command, &desired, Duration::from_millis(5000))?;
+    println!("  Written and verified: the keyboard reads back exactly what was sent.");
+    println!();
+    println!("  Test a few keys. If anything is wrong, restore your other backup, or use");
+    println!("  the keyboard's factory reset to return to the stock keymap.");
     Ok(())
 }

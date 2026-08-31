@@ -41,6 +41,24 @@ pub const CMD_READ_BASIC: u8 = 0x12;
 /// Read command for the Fn layer.
 pub const CMD_READ_FN: u8 = 0x16;
 
+/// Write command for the basic (unshifted) keymap layer.
+pub const CMD_WRITE_BASIC: u8 = 0x22;
+/// Write command for the Fn layer.
+pub const CMD_WRITE_FN: u8 = 0x26;
+
+/// The write command paired with a given read command.
+///
+/// Pairing them in one place means a caller cannot accidentally read the base layer and
+/// write it back over the Fn layer, which would look like a successful restore and leave
+/// the keyboard typing the wrong things.
+pub fn write_command_for(read_command: u8) -> Option<u8> {
+    match read_command {
+        CMD_READ_BASIC => Some(CMD_WRITE_BASIC),
+        CMD_READ_FN => Some(CMD_WRITE_FN),
+        _ => None,
+    }
+}
+
 /// One key binding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeyBinding {
@@ -135,6 +153,61 @@ pub fn build_read_request(command: u8, offset: u32) -> [u8; 64] {
     packet[3..6].copy_from_slice(&offset.to_le_bytes()[..3]);
     // Byte 6 is the final-packet flag; paged reads leave it clear.
     packet
+}
+
+/// Build one 64-byte `AA 22`/`AA 26` keymap write request.
+///
+/// Layout mirrors the read request: command, declared length, 24-bit LE offset, then the
+/// 56-byte page at bytes 8..64.
+///
+/// # Errors
+///
+/// Rejects any command that is not a known keymap write, so a typo cannot turn a keymap
+/// restore into some other config-channel operation.
+pub fn build_write_request(command: u8, offset: u32, page: &[u8]) -> Result<[u8; 64], ProtoError> {
+    if command != CMD_WRITE_BASIC && command != CMD_WRITE_FN {
+        return Err(ProtoError::InvalidDateTime(
+            "keymap write command must be AA 22 or AA 26",
+        ));
+    }
+    if page.len() != PAGE_SIZE {
+        return Err(ProtoError::ConfigPacketSize {
+            got: page.len(),
+            expected: PAGE_SIZE,
+        });
+    }
+
+    let mut packet = [0u8; 64];
+    packet[0] = 0xAA;
+    packet[1] = command;
+    packet[2] = PAGE_SIZE as u8;
+    packet[3..6].copy_from_slice(&offset.to_le_bytes()[..3]);
+    packet[8..8 + PAGE_SIZE].copy_from_slice(page);
+    Ok(packet)
+}
+
+/// Split a full keymap table into the 56-byte pages the write protocol expects.
+///
+/// The table must be exactly the matrix size: a short table would leave part of the
+/// keyboard holding whatever was there before, which is a half-applied keymap and worse
+/// than a rejected one.
+pub fn write_pages(table: &[u8]) -> Result<Vec<(u32, Vec<u8>)>, ProtoError> {
+    let expected = MATRIX_KEYS * ENTRY_SIZE;
+    if table.len() != expected {
+        return Err(ProtoError::ConfigPacketSize {
+            got: table.len(),
+            expected,
+        });
+    }
+    Ok(table
+        .chunks(PAGE_SIZE)
+        .enumerate()
+        .map(|(i, chunk)| {
+            let mut page = vec![0u8; PAGE_SIZE];
+            page[..chunk.len()].copy_from_slice(chunk);
+            ((i * PAGE_SIZE) as u32, page)
+        })
+        .collect())
 }
 
 /// Names for the HID Keyboard/Keypad usage page (0x07).
