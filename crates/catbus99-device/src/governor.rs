@@ -381,6 +381,11 @@ pub struct UploadOutcome {
     pub bytes: usize,
     pub uploads_used: u64,
     pub uploads_remaining: u64,
+    /// Acknowledgement latency per report, when a transfer actually happened.
+    pub report_timings: Vec<std::time::Duration>,
+    /// What those latencies suggest about where the bytes landed. `None` when nothing was
+    /// sent. This is inference, not a storage trace -- see [`crate::timing`].
+    pub storage_verdict: Option<crate::timing::StorageVerdict>,
 }
 
 impl Governor {
@@ -406,6 +411,8 @@ impl Governor {
             bytes: payload.len(),
             uploads_used: self.state.total_uploads,
             uploads_remaining: wear::budget_remaining(self.state.total_uploads),
+            report_timings: Vec::new(),
+            storage_verdict: None,
         };
         if !decision.will_upload() {
             return Ok(outcome);
@@ -413,7 +420,9 @@ impl Governor {
 
         let device = Device::open(Interface::Tft)?;
         match device.upload_container(payload, timeout, None) {
-            Ok(_) => {
+            Ok(timings) => {
+                outcome.storage_verdict = Some(crate::timing::classify(&timings));
+                outcome.report_timings = timings;
                 self.record_upload(payload, lane, now);
                 let _ = self.save();
                 outcome.uploaded = true;

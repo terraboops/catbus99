@@ -487,18 +487,27 @@ impl Device {
         Ok(())
     }
 
+    /// Send a container, returning the acknowledgement latency of each report.
+    ///
+    /// The timings are the only observable that says anything about where the bytes land:
+    /// the protocol has no read-back, but a flash erase is orders of magnitude slower than
+    /// a bus transfer, so it shows up as a stall. See [`crate::timing`].
     pub(crate) fn upload_container(
         &self,
         payload: &[u8],
         timeout: Duration,
         mut progress: Option<Progress<'_>>,
-    ) -> Result<usize, HidError> {
+    ) -> Result<Vec<Duration>, HidError> {
         use catbus99_proto::report::{build_reports, is_valid_ack, ACK_SIZE};
 
         let reports = build_reports(payload)?;
         let total = reports.len();
+        let mut timings = Vec::with_capacity(total);
 
         for (index, report) in reports.iter().enumerate() {
+            // Timed from just before the write to just after a valid ACK, so the span
+            // covers whatever the firmware does with the block.
+            let started = std::time::Instant::now();
             self.write_report_unchecked(report)?;
 
             let ack = self.read_report(ACK_SIZE, timeout)?;
@@ -516,10 +525,11 @@ impl Device {
                         .join(" "),
                 });
             }
+            timings.push(started.elapsed());
             if let Some(cb) = progress.as_mut() {
                 cb(index + 1, total);
             }
         }
-        Ok(total)
+        Ok(timings)
     }
 }

@@ -25,10 +25,12 @@
 
 pub mod governor;
 pub mod paths;
+pub mod timing;
 pub mod transport;
 
 pub use governor::{
     default_state_path, hash_payload, Decision, Governor, GovernorConfig, GovernorError, Lane,
     UploadOutcome, WearReport, WearState,
 };
+pub use timing::{classify, StorageVerdict};
 pub use transport::{init, probe, Device, HidError, Interface, InterfaceReport, ProbeReport};

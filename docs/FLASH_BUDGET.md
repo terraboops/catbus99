@@ -1,5 +1,18 @@
 # Flash budget and display resolution
 
+> **The core assumption here is unverified.** We have never measured whether a screen
+> upload actually writes flash. The protocol has no read-back and no storage-commit
+> command, so it is not directly observable. It *is* indirectly observable: an erase is far
+> slower than a bus transfer, so it shows up as a stalled report. Every upload now records
+> per-report acknowledgement latency and prints a verdict — see `catbus99 image --execute`
+> output and `crates/catbus99-device/src/timing.rs`. Until that has run on real hardware,
+> treat the numbers below as an upper bound on cost, not a measurement.
+>
+> If stills turn out to stream straight to the panel controller (plausible: it is a COG
+> module with its own GRAM, and 30,720 bytes exceeds the MCU's SRAM only slightly), then a
+> single-frame upload may cost *no* flash cycles at all, and this budget is wildly
+> pessimistic for the common case.
+
 The display's flash is rated at 100,000 program/erase cycles, and we conservatively count
 one upload as one cycle. That budget is not really a limit on how often catbus99 runs. It is a limit on how
 precisely it displays things.
