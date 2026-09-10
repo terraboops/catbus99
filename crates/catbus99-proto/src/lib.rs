@@ -20,6 +20,7 @@ pub mod clock;
 pub mod container;
 pub mod error;
 pub mod keymap;
+pub mod ota;
 pub mod report;
 pub mod wear;
 

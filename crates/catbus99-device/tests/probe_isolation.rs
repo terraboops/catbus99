@@ -71,3 +71,24 @@ fn explicit_init_is_idempotent() {
     catbus99_device::init().expect("init again");
     catbus99_device::probe().expect("probe after init");
 }
+
+/// The vendor's firmware commands share the `AA <cmd>` framing catbus99 uses for the clock
+/// and keymaps, so nothing in the transport would otherwise stop one being sent. This is
+/// the guard, checked at the error type since sending requires hardware.
+#[test]
+fn firmware_commands_are_refused_by_name() {
+    let err = catbus99_device::HidError::FirmwareCommandRefused {
+        command: 0x82,
+        name: "OTA_DEVICE_ENTER_BOOT",
+    };
+    let msg = err.to_string();
+    assert!(msg.contains("AA 82"), "should name the opcode: {msg}");
+    assert!(
+        msg.contains("OTA_DEVICE_ENTER_BOOT"),
+        "should name the command: {msg}"
+    );
+    assert!(
+        msg.contains("bootloader"),
+        "should say why it matters: {msg}"
+    );
+}

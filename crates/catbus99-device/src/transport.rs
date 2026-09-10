@@ -143,6 +143,9 @@ pub enum HidError {
     #[error("short write: sent {sent} of {expected} bytes")]
     ShortWrite { sent: usize, expected: usize },
 
+    #[error("refusing to send firmware command AA {command:02X} ({name}). catbus99 does not perform firmware operations; OTA_DEVICE_ENTER_BOOT in particular would leave the keyboard in its bootloader with no application running")]
+    FirmwareCommandRefused { command: u8, name: &'static str },
+
     #[error("keymap read-back does not match what was written, first difference at byte {offset}. The keymap may be partially applied: re-run the restore, or use the keyboard's factory reset")]
     KeymapVerifyFailed { offset: usize },
 
@@ -337,6 +340,19 @@ impl Device {
         // panel's flash. Refuse it: bulk image writes go through the governor.
         if report.len() >= 2 && report[0] == 0xAA && report[1] == catbus99_proto::report::CMD_TFT {
             return Err(HidError::UngovernedPanelWrite);
+        }
+        // The vendor's firmware (OTA) commands share this framing, so nothing else would
+        // stop us sending one. catbus99 operates on pixels, keymaps and the clock; it has
+        // no business in the firmware domain, and OTA_DEVICE_ENTER_BOOT would leave the
+        // keyboard sitting in a bootloader with no application running.
+        if report.len() >= 2
+            && report[0] == 0xAA
+            && catbus99_proto::ota::is_firmware_domain(report[1])
+        {
+            return Err(HidError::FirmwareCommandRefused {
+                command: report[1],
+                name: catbus99_proto::ota::firmware_command_name(report[1]),
+            });
         }
         self.write_report_unchecked(report)
     }

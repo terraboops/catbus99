@@ -128,6 +128,40 @@ verbatim rather than guessed at, so a backup restores exactly what was read.
 `catbus99 keymap [--fn-layer] [--out file.json]` reads and decodes this. It is read-only;
 restoring a keymap is a separate destructive operation and is not implemented.
 
+### The vendor firmware (OTA) command family
+
+Decoded 2026-09-09 from Epomaker's own web driver at `epomaker.driveall.cn` — a *different*
+application from `hub.epomaker.com`, and the one Epomaker support directs owners to. It
+carries a complete over-the-air firmware implementation. **[V]**
+
+| Command | Meaning |
+| --- | --- |
+| `AA 10` | `GET_DEVICE_INFO` — the command we already use |
+| `AA 40` | `BOOT_ANIMATION` |
+| `AA 80` | `OTA_GET_DEVICE_SYSTEM_INFO` |
+| `AA 81` | `OTA_VERIFY_FIRMWARE_INFO` |
+| `AA 82` | **`OTA_DEVICE_ENTER_BOOT`** — reboots into the bootloader |
+| `AA 83` | `OTA_SEND_FIRMWARE_INFO` |
+| `AA 84` | `OTA_GET_DEVICE_SN` |
+| `AA 85` | `OTA_SWITCH_APP_PARTITION` |
+| `AA 86` | `OTA_SET_DEVICE_SN` |
+
+`GET_DEVICE_INFO = 0x10` is the anchor: it matches the `AA 10` we independently
+reverse-engineered, which establishes the rest of the table is the same command family.
+
+The device-info reply parses as: bootloader version, app version, manufacturer at bytes
+4–5 LE, product at 6–7 LE, and a **running area** byte (`0x10` app, `0x30` boot). Decoding
+our own capture with the vendor's logic yields manufacturer `0x0C45` and product `0x800A`
+exactly — but the running-area byte reads `0x17`, which is neither of the vendor's values,
+so on this model that byte may carry something else. **[?]**
+
+**Consequences.** The keyboard has a bootloader reachable **in software**, partitioned
+application firmware, and a vendor OTA flow that fetches images by plain unauthenticated
+`GET`. That materially changes what a firmware project on this board would have to do — and
+it is why catbus99 refuses the entire `0x80..=0x86` range in `Device::write_report`. These
+commands share our framing, and `AA 82` would leave the keyboard in a bootloader with no
+application running. See `crates/catbus99-proto/src/ota.rs`.
+
 ### Complete observed command set
 
 Captured from Epomaker's own driver across device bind, clock sync, clear, image write and
