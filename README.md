@@ -303,7 +303,7 @@ useful.
 ## Hacking on it
 
 ```sh
-cargo test                                    # 205 tests, no keyboard needed
+cargo test                                    # 233 tests, no keyboard needed
 cargo clippy --all-targets -- -D warnings
 ```
 

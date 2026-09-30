@@ -5,7 +5,7 @@ Bug reports, protocol findings, and hardware reports from other units are all we
 ## Before you start
 
 ```sh
-cargo test                                  # 205 tests, no keyboard required
+cargo test                                  # 233 tests, no keyboard required
 cargo clippy --all-targets -- -D warnings
 cargo fmt
 ```
