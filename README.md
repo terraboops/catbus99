@@ -223,7 +223,8 @@ catbus99 keymap --fn-layer
 Read-only. The table turns out to be the firmware's 16×7 key matrix rather than the visual
 layout, so the numpad is threaded through the middle of each row. Entries we can't identify
 are kept byte-for-byte instead of guessed at, which means a backup restores exactly what it
-read. Restore isn't implemented.
+read. Restore is a separate command, `catbus99 keymap-restore`: dry-run by default, and it
+verifies the write afterwards.
 
 ## Shape of the thing
 

@@ -110,12 +110,11 @@ enum Command {
         #[arg(long)]
         seed: Option<u64>,
     },
-    /// Upload a two-frame black/white test pattern to verify the display path.
+    /// Render an image or animated GIF and upload it to the screen.
     ///
-    /// This is the Phase 0 hardware gate. It costs one flash write, and there is no
-    /// command to undo it -- the screen keeps the pattern until something else is
-    /// uploaded or the keyboard is power-cycled.
-    /// Render an image or animated GIF and push it to the screen.
+    /// It costs one flash write, and there is no command to undo it -- the screen
+    /// keeps the image until something else is uploaded or the keyboard is
+    /// power-cycled. Use --preview to render to a PNG without writing anything.
     Image {
         /// Image or GIF to display.
         path: PathBuf,
