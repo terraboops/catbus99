@@ -287,7 +287,11 @@ dedicated thread that parks forever and never dies.
 Working and verified on hardware: transport on macOS, images and GIFs, the widget compositor,
 the governor and odometer, the source scheduler, the MCP server, clock sync, keymap backup.
 
-Not built yet: keymap restore, launchd install, Homebrew and crates.io packaging, per-widget
+Built but not yet verified on hardware: keymap restore. `catbus99 keymap-restore` is dry-run
+by default and round-trips a captured keymap in the tests, but no write-back to a real board
+has been done.
+
+Not built yet: launchd install, Homebrew and crates.io packaging, per-widget
 dithering, and moving uploads off the async runtime (a long animation currently blocks the
 daemon while it transfers).
 
@@ -330,7 +334,7 @@ More in [docs/TESTING.md](docs/TESTING.md) and [CONTRIBUTING.md](CONTRIBUTING.md
 This writes to flash that wears out and can't be replaced, using undocumented firmware
 commands, on a keyboard nobody officially supports doing this to. It never sends firmware,
 reset, macro or lighting commands, and the only writes it makes are images, the clock, and
-keymaps if you go implement restore. It ships with conservative limits and counts everything.
+keymaps (via keymap-restore). It ships with conservative limits and counts everything.
 Still: your keyboard, your risk.
 
 Unofficial. Not affiliated with Epomaker, who make a nice keyboard and did not ask for any of
